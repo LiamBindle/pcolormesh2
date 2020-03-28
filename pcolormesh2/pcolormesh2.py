@@ -73,6 +73,8 @@ def pcolormesh2(X, Y, C, blocksize, norm, **kwargs):
     kwargs.setdefault('cmap', 'viridis')
     cmap = plt.get_cmap(kwargs['cmap'])
 
+    ax = plt.gca()
+
     for si, ei in [(s * blocksize, (s + 1) * blocksize + 1) for s in range(X.shape[0] // blocksize)]:
         for sj, ej in [(s * blocksize, (s + 1) * blocksize + 1) for s in range(X.shape[1] // blocksize)]:
             _pcolormesh2_internal(ax,
@@ -84,35 +86,82 @@ def pcolormesh2(X, Y, C, blocksize, norm, **kwargs):
 
 
 if __name__ == '__main__':
+    # import xarray as xr
+    #
+    # from sg.grids import StretchedGrid
+    #
+    # plt.figure()
+    #
+    # ds = xr.open_dataset('/extra-space/foo/c180e/EU3/OutputDir/GCHP.SpeciesConc.20160716_1200z.nc4')
+    # grid = StretchedGrid(32, 6.8, 42.5, 12.5)
+    #
+    # da = ds['SpeciesConc_O3'].isel(lev=0).squeeze()
+    #
+    # stepsize = 4
+    #
+    # ax = plt.axes(projection=ccrs.Orthographic(30, -70))
+    # ax.set_global()
+    #
+    # ax.coastlines()
+    #
+    # norm = plt.Normalize(da.min(), da.max())
+    #
+    # for nf in range(6):
+    #     # if nf==2:
+    #     #     continue
+    #
+    #     X = grid.xe(nf)
+    #     Y = grid.ye(nf)
+    #
+    #     pcolormesh2(X, Y,  da.isel(nf=nf), 32 if nf != 2 else 4, norm)
+    #
+    #
+    #
+    # plt.show()
+    from tqdm import tqdm
+
+    def draw_major_grid_boxes_naive(ax, xx, yy, **kwargs):
+        xx_majors = [xx[0, :], xx[-1, :], xx[:, 0], xx[:, -1]]
+        yy_majors = [yy[0, :], yy[-1, :], yy[:, 0], yy[:, -1]]
+        for xm, ym in zip(xx_majors, yy_majors):
+            ax.plot(xm, ym, transform=ccrs.PlateCarree(), color='k', linewidth=0.8, linestyle='-')
+
     import xarray as xr
+    from sg.grids import CubeSphere, StretchedGrid
 
-    from sg.grids import StretchedGrid
+    ds = xr.open_dataset('/home/liam/analysis/ensemble-2/c180e.nc')
+    layer=34
 
-    plt.figure()
+    ID='EU4'
 
-    ds = xr.open_dataset('/extra-space/foo/c180e/EU3/OutputDir/GCHP.SpeciesConc.20160716_1200z.nc4')
-    grid = StretchedGrid(32, 6.8, 42.5, 12.5)
+    da = ds['NOx'].isel(lev=layer).sel(ID='CTL').squeeze()
 
-    da = ds['SpeciesConc_O3'].isel(lev=0).squeeze()
+    grid = CubeSphere(180)
 
-    stepsize = 4
 
-    ax = plt.axes(projection=ccrs.Orthographic(30, -70))
+    plt.figure(figsize=(8.5,11))
+
+    ax = plt.subplot(2,1,1, projection=ccrs.EqualEarth())
+    ax.coastlines()
     ax.set_global()
 
+    norm = plt.Normalize(float(da.min()), float(da.max()))
+    for face in tqdm(range(6)):
+        pcolormesh2(grid.xe(face), grid.ye(face), da.isel(face=face), 180 if face != 2 else 20, norm)
+
+    ds_sg = ds.sel(ID=ID)
+    da = ds_sg['NOx'].isel(lev=layer).squeeze()
+    stretched_grid = StretchedGrid(int(ds_sg.cs_res), float(ds_sg.stretch_factor), float(ds_sg.target_lat), float(ds_sg.target_lon))
+
+    draw_major_grid_boxes_naive(plt.gca(), stretched_grid.xe(5), stretched_grid.ye(5))
+    ax = plt.subplot(2,1,2, projection=ccrs.EqualEarth())
     ax.coastlines()
-
-    norm = plt.Normalize(da.min(), da.max())
-
-    for nf in range(6):
-        # if nf==2:
-        #     continue
-
-        X = grid.xe(nf)
-        Y = grid.ye(nf)
-
-        pcolormesh2(X, Y,  da.isel(nf=nf), 32 if nf != 2 else 4, norm)
+    ax.set_global()
+    for face in tqdm(range(6)):
+        pcolormesh2(grid.xe(face), grid.ye(face), da.isel(face=face), 180 if face != 2 else 20, norm)
+    draw_major_grid_boxes_naive(plt.gca(), stretched_grid.xe(5), stretched_grid.ye(5))
 
 
 
-    plt.show()
+    plt.savefig(f'{ID}-{layer}.png', dpi=300)
+    #plt.show()
